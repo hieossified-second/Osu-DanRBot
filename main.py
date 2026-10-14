@@ -159,28 +159,30 @@ async def extrair_dan(url_perfil: str) -> str | None:
 
             print(f"[Playwright] Acessando URL: {url_skills}", flush=True)
             try:
-                await page.goto(url_skills, wait_until="networkidle", timeout=20000)
-                await asyncio.sleep(2)
-            except Exception:
-                pass
+                await page.goto(url_skills, wait_until="networkidle", timeout=25000)
+                
+                # Aguarda o elemento de estimativa Regular carregar na página renderizada
+                await page.wait_for_selector("button", timeout=15000)
+                await asyncio.sleep(2) # Pausa de segurança para o React injetar as imagens/títulos
+            except Exception as e:
+                print(f"[Playwright Alerta] Timeout ao aguardar seletores dinâmicos: {e}", flush=True)
             
             content = await page.content()
             soup = BeautifulSoup(content, "html.parser")
 
-            # Varre todas as imagens da página à procura de referências de dan na source ou no alt
+            # 1. Procura em todas as imagens da página por referências de Dan
             for img in soup.find_all("img"):
                 src = img.get("src", "")
                 alt = img.get("alt", "").strip().lower()
                 
                 if "dans/" in src or alt:
-                    # Verifica se o alt ou o nome do arquivo contém algum dos dans da ordem
                     for d in ORDEM_DANS:
                         if d in alt or d in src.lower():
                             print(f"[Sucesso Img/Alt] Dan detectado: alt='{alt}', src='{src}'", flush=True)
                             await browser.close()
                             return processar_dan_com_low(alt if alt else d)
 
-            # Varre os atributos title dos botões de estimativa
+            # 2. Procura nos botões de estimativa (Regular / LN)
             for button in soup.find_all("button"):
                 title = button.get("title", "").lower()
                 if "dan estimate:" in title or "regular" in title or "ln" in title:
@@ -192,7 +194,7 @@ async def extrair_dan(url_perfil: str) -> str | None:
 
             await browser.close()
 
-        print(f"[Aviso] Nenhum registo de Dan foi localizado no perfil.", flush=True)
+        print(f"[Aviso] Nenhum registo de Dan foi localizado no perfil após renderização dinâmica.", flush=True)
 
     except Exception as e:
         print(f"[Erro Scraping] Falha ao processar {url_perfil}: {e}", flush=True)
