@@ -133,8 +133,6 @@ def processar_dan_com_low(dan_texto_raw: str) -> str | None:
 async def extrair_dan(url_perfil: str) -> str | None:
     try:
         url_limpa = url_perfil.strip()
-        
-        # Se o utilizador enviou o link com ID ou nome, normaliza para garantir que vai para /skills
         parsed = urlparse(url_limpa)
         caminho_base = parsed.path.rstrip('/')
         for sub in ['/skills', '/reform', '/scores', '/top']:
@@ -194,52 +192,6 @@ async def extrair_dan(url_perfil: str) -> str | None:
         print(f"[Erro Scraping] Falha ao processar {url_perfil}: {e}", flush=True)
     return None
 
-@bot.tree.command(name="registrar", description="Registra seu perfil do mania!tracker para sincronizar seu Dan.")
-@app_commands.describe(url="Link do seu perfil no mania-tracker.com (ex: https://mania-tracker.com/player/36083242)")
-async def registrar(interaction: discord.Interaction, url: str):
-    await interaction.response.defer(ephemeral=True)
-    
-    try:
-        if not interaction.guild:
-            await interaction.followup.send("Este comando deve ser usado dentro de um servidor do Discord.", ephemeral=True)
-            return
-
-        # Limpeza simples mantendo a URL intacta
-        url_limpa = url.strip().strip("<>")
-
-        if "mania-tracker.com" not in url_limpa.lower():
-            await interaction.followup.send("URL inválida! Por favor, envie o link do mania-tracker.com.", ephemeral=True)
-            return
-
-        salvar_usuario(interaction.user.id, url_limpa)
-        
-        dan_detectado = await extrair_dan(url_limpa)
-
-        if dan_detectado and dan_detectado in MAPA_DANS:
-            membro = interaction.guild.get_member(interaction.user.id)
-            if not membro:
-                try:
-                    membro = await interaction.guild.fetch_member(interaction.user.id)
-                except Exception:
-                    membro = None
-
-            if membro:
-                await atualizar_cargo_membro(interaction.guild, membro, dan_detectado)
-                nome_cargo = MAPA_DANS[dan_detectado]
-                await interaction.followup.send(
-                    f"Perfil vinculado com sucesso! Seu cargo foi atualizado para **{nome_cargo}** neste servidor.",
-                    ephemeral=True
-                )
-            else:
-                await interaction.followup.send("Perfil registrado, mas não foi possível localizar seu usuário no servidor.", ephemeral=True)
-        else:
-            await interaction.followup.send(
-                "Perfil registrado! O bot tentará atualizar seu Dan no próximo ciclo automático.",
-                ephemeral=True
-            )
-    except Exception as e:
-        print(f"[Erro no Comando Registrar] {e}", flush=True)
-        await interaction.followup.send("Ocorreu um erro ao processar o seu registro. Tente novamente em instantes.", ephemeral=True)
 # ==============================================================================
 # CONFIGURAÇÃO DO BOT DISCORD
 # ==============================================================================
@@ -324,7 +276,7 @@ async def on_ready():
         sincronizar_cargos_loop.start()
 
 @bot.tree.command(name="registrar", description="Registra seu perfil do mania!tracker para sincronizar seu Dan.")
-@app_commands.describe(url="Link do seu perfil no mania-tracker.com")
+@app_commands.describe(url="Link do seu perfil no mania-tracker.com (ex: https://mania-tracker.com/player/36083242)")
 async def registrar(interaction: discord.Interaction, url: str):
     await interaction.response.defer(ephemeral=True)
     
@@ -333,15 +285,7 @@ async def registrar(interaction: discord.Interaction, url: str):
             await interaction.followup.send("Este comando deve ser usado dentro de um servidor do Discord.", ephemeral=True)
             return
 
-        url_limpa = urllib.parse.unquote(url.strip())
-        if "[" in url_limpa:
-            url_limpa = url_limpa.split("[")[0]
-
-        match = re.search(r'https?://[^\s\)]+', url_limpa)
-        if match:
-            url_limpa = match.group(0)
-        
-        url_limpa = url_limpa.rstrip(">)]").lstrip("<([")
+        url_limpa = url.strip().strip("<>")
 
         if "mania-tracker.com" not in url_limpa.lower():
             await interaction.followup.send("URL inválida! Por favor, envie o link do mania-tracker.com.", ephemeral=True)
