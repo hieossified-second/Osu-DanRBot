@@ -324,14 +324,26 @@ async def registrar(interaction: discord.Interaction, url: str):
 # ==============================================================================
 # INICIALIZAÇÃO CORRETA PARA O RENDER
 # ==============================================================================
+# ==============================================================================
+# INICIALIZAÇÃO SEGURA PARA O RENDER
+# ==============================================================================
 async def main():
-    if TOKEN:
-        await iniciar_servidor_web()
-        await asyncio.sleep(2)
-        async with bot:
-            await bot.start(TOKEN)
-    else:
+    if not TOKEN:
         print("ERRO: A variável de ambiente DISCORD_TOKEN não foi configurada!", flush=True)
+        return
+
+    # Inicia o servidor web do Render em background para evitar bloqueios
+    try:
+        await iniciar_servidor_web()
+    except Exception as e:
+        print(f"[Aviso Servidor Web] Erro ao iniciar porta: {e}", flush=True)
+
+    # Inicia o bot do Discord
+    async with bot:
+        await bot.start(TOKEN)
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        pass
