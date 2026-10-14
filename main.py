@@ -322,9 +322,6 @@ async def registrar(interaction: discord.Interaction, url: str):
         await interaction.followup.send("Ocorreu um erro ao processar o seu registro. Tente novamente em instantes.", ephemeral=True)
 
 # ==============================================================================
-# INICIALIZAÇÃO CORRETA PARA O RENDER
-# ==============================================================================
-# ==============================================================================
 # INICIALIZAÇÃO SEGURA PARA O RENDER
 # ==============================================================================
 async def main():
@@ -332,13 +329,11 @@ async def main():
         print("ERRO: A variável de ambiente DISCORD_TOKEN não foi configurada!", flush=True)
         return
 
-    # Inicia o servidor web do Render em background para evitar bloqueios
     try:
         await iniciar_servidor_web()
     except Exception as e:
         print(f"[Aviso Servidor Web] Erro ao iniciar porta: {e}", flush=True)
 
-    # Inicia o bot do Discord
     async with bot:
         await bot.start(TOKEN)
 
