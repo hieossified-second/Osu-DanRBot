@@ -5,7 +5,7 @@
 
 # HOW TO USE:
 
-- first get you account in mania tracker: https://mania-tracker.com/?country=GLOBAL
+- first get you account in mania tracker: <a href="https://mania-tracker.com/player/Hssfd[AAAAAAAI]" target="_blank">Mania Tracker HERE!</a>
 - <img width="669" height="339" alt="image" src="https://github.com/user-attachments/assets/41b5aa6a-5576-43f7-a7a2-c6eb74493c56" />
   
 - After that you NEED to get your ID profile in osu!mania : https://osu.ppy.sh/
