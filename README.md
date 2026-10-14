@@ -9,11 +9,10 @@
 
 
 - Passo 2: Caso o seu nome de utilizador contenha caracteres especiais ou chavetas (como [AAAAAAAI]), copie o seu ID numérico de perfil diretamente no site oficial do osu!mania: <a href="https://osu.ppy.sh/" target="_blank">OSU! HERE!</a>
-
-<img width="483" height="78" alt="image" src="https://github.com/user-attachments/assets/cea59727-aefc-4afe-9309-0a09265ea65c" />
+  <img width="483" height="78" alt="image" src="https://github.com/user-attachments/assets/cea59727-aefc-4afe-9309-0a09265ea65c" />
 
 
 
 - Passo 3: Substitua o seu nome de utilizador na URL do mania!tracker pelo seu ID numérico para garantir uma leitura limpa e sem erros, utilizando o comando no Discord da seguinte forma:   Plaintext/registrar url: https://mania-tracker.com/player/36083242
-<img width="483" height="78" alt="image" src="https://github.com/user-attachments/assets/39702b03-a268-468b-bf84-ec235aecfa61" />
+  <img width="483" height="78" alt="image" src="https://github.com/user-attachments/assets/39702b03-a268-468b-bf84-ec235aecfa61" />
 
