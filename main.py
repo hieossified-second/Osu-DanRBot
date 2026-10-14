@@ -145,10 +145,7 @@ async def extrair_dan(url_perfil: str) -> str | None:
                 caminho_base = caminho_base[:-len(sub)]
                 break
 
-        urls_para_testar = [
-            f"{parsed.scheme}://{parsed.netloc}{caminho_base}/skills",
-            f"{parsed.scheme}://{parsed.netloc}{caminho_base}"
-        ]
+        url_skills = f"{parsed.scheme}://{parsed.netloc}{caminho_base}/skills"
 
         async with async_playwright() as p:
             browser = await p.chromium.launch(
@@ -160,46 +157,38 @@ async def extrair_dan(url_perfil: str) -> str | None:
             )
             page = await context.new_page()
 
-            for url_final in urls_para_testar:
-                print(f"[Playwright] Acessando URL: {url_final}", flush=True)
-                try:
-                    await page.goto(url_final, wait_until="domcontentloaded", timeout=20000)
-                    await asyncio.sleep(2)
-                except Exception:
-                    continue
+            print(f"[Playwright] Acessando URL: {url_skills}", flush=True)
+            try:
+                await page.goto(url_skills, wait_until="networkidle", timeout=20000)
+                await asyncio.sleep(2)
+            except Exception:
+                pass
+            
+            content = await page.content()
+            soup = BeautifulSoup(content, "html.parser")
+
+            # Varre todas as imagens da página à procura de referências de dan na source ou no alt
+            for img in soup.find_all("img"):
+                src = img.get("src", "")
+                alt = img.get("alt", "").strip().lower()
                 
-                content = await page.content()
-                soup = BeautifulSoup(content, "html.parser")
+                if "dans/" in src or alt:
+                    # Verifica se o alt ou o nome do arquivo contém algum dos dans da ordem
+                    for d in ORDEM_DANS:
+                        if d in alt or d in src.lower():
+                            print(f"[Sucesso Img/Alt] Dan detectado: alt='{alt}', src='{src}'", flush=True)
+                            await browser.close()
+                            return processar_dan_com_low(alt if alt else d)
 
-                # 1. Busca por imagens de Dan
-                for img in soup.find_all("img"):
-                    src = img.get("src", "")
-                    alt = img.get("alt", "").strip()
-                    
-                    if "/images/dans/" in src:
-                        if alt:
-                            print(f"[Sucesso Alt Img] Dan encontrado: '{alt}'", flush=True)
+            # Varre os atributos title dos botões de estimativa
+            for button in soup.find_all("button"):
+                title = button.get("title", "").lower()
+                if "dan estimate:" in title or "regular" in title or "ln" in title:
+                    for d in ORDEM_DANS:
+                        if d in title:
+                            print(f"[Sucesso Title Button] Dan detectado no title: '{title}'", flush=True)
                             await browser.close()
-                            return processar_dan_com_low(alt)
-                        
-                        caminho_src = urlparse(src).path
-                        nome_arquivo = os.path.basename(caminho_src)
-                        dan_raw = os.path.splitext(nome_arquivo)[0]
-                        if dan_raw:
-                            print(f"[Sucesso Src Img] Dan encontrado: '{dan_raw}'", flush=True)
-                            await browser.close()
-                            return processar_dan_com_low(dan_raw)
-
-                # 2. Busca pelo atributo title dos botões
-                for button in soup.find_all("button"):
-                    title = button.get("title", "")
-                    if "Regular dan estimate:" in title:
-                        match = re.search(r'~([a-zA-Z0-9_\-\+\s]+?),', title)
-                        if match:
-                            dan_bruto = match.group(1).strip()
-                            print(f"[Sucesso Title Button] Dan encontrado: '{dan_bruto}'", flush=True)
-                            await browser.close()
-                            return processar_dan_com_low(dan_bruto)
+                            return processar_dan_com_low(title)
 
             await browser.close()
 
