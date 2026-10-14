@@ -218,6 +218,7 @@ async def atualizar_cargo_membro(guild: discord.Guild, membro: discord.Member, d
     cargo_alvo = discord.utils.get(guild.roles, name=nome_cargo_alvo)
     
     if not cargo_alvo:
+        print(f"[Aviso] O cargo '{nome_cargo_alvo}' não foi encontrado no servidor '{guild.name}'.")
         return
 
     todos_cargos_dan = set(MAPA_DANS.values())
@@ -232,14 +233,14 @@ async def atualizar_cargo_membro(guild: discord.Guild, membro: discord.Member, d
             await membro.add_roles(cargo_alvo)
             print(f"[Sucesso] Cargo '{nome_cargo_alvo}' concedido a {membro.display_name} no servidor '{guild.name}'!")
     except discord.Forbidden:
-        print(f"[Erro Permissão] O cargo do bot precisa de estar no TOPO da lista no servidor '{guild.name}'.")
+        print(f"[Erro Permissao] O cargo do bot precisa de estar no TOPO da lista de cargos no servidor '{guild.name}'.")
     except Exception as e:
-        print(f"[Erro de Atribuição] {e}")
+        print(f"[Erro de Atribuicao] {e}")
 
 # ==============================================================================
-# TAREFA AGENDADA
+# TAREFA AGENDADA (Ajustado para 5 minutos para evitar Rate Limit e travamentos)
 # ==============================================================================
-@tasks.loop(seconds=20)
+@tasks.loop(minutes=5)
 async def sincronizar_cargos_loop():
     usuarios = obter_todos_usuarios()
     if not usuarios:
@@ -287,10 +288,14 @@ async def on_ready():
 @bot.tree.command(name="registrar", description="Registra seu perfil do mania!tracker para sincronizar seu Dan.")
 @app_commands.describe(url="Link do seu perfil no mania-tracker.com")
 async def registrar(interaction: discord.Interaction, url: str):
-    # 1. AVISA O DISCORD IMEDIATAMENTE QUE O BOT ESTÁ A PROCESSAR (Evita o erro "Não respondeu")
+    # Responde imediatamente ao Discord para não dar timeout
     await interaction.response.defer(ephemeral=True)
     
     try:
+        if not interaction.guild:
+            await interaction.followup.send("Este comando deve ser usado dentro de um servidor do Discord.", ephemeral=True)
+            return
+
         url_limpa = urllib.parse.unquote(url.strip())
         match = re.search(r'https?://[^\s\)]+', url_limpa)
         if match:
@@ -304,33 +309,43 @@ async def registrar(interaction: discord.Interaction, url: str):
 
         salvar_usuario(interaction.user.id, url_limpa)
         
-        # 2. FAZ O SCRAPING COM O PLAYWRIGHT (Pode demorar vários segundos agora sem dar erro)
         async with aiohttp.ClientSession() as session:
             dan_detectado = await extrair_dan(session, url_limpa)
 
         if dan_detectado and dan_detectado in MAPA_DANS:
-            membro = interaction.guild.get_member(interaction.user.id) or await interaction.guild.fetch_member(interaction.user.id)
-            await atualizar_cargo_membro(interaction.guild, membro, dan_detectado)
-            
-            nome_cargo = MAPA_DANS[dan_detectado]
-            await interaction.followup.send(
-                f"Perfil vinculado com sucesso! Seu cargo foi atualizado para **{nome_cargo}** neste servidor.",
-                ephemeral=True
-            )
+            # Busca o membro com fallback direto na API
+            membro = interaction.guild.get_member(interaction.user.id)
+            if not membro:
+                try:
+                    membro = await interaction.guild.fetch_member(interaction.user.id)
+                except Exception:
+                    membro = None
+
+            if membro:
+                await atualizar_cargo_membro(interaction.guild, membro, dan_detectado)
+                nome_cargo = MAPA_DANS[dan_detectado]
+                await interaction.followup.send(
+                    f"Perfil vinculado com sucesso! Seu cargo foi atualizado para **{nome_cargo}** neste servidor.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send("Perfil registrado, mas não foi possível localizar seu usuário no servidor.", ephemeral=True)
         else:
             await interaction.followup.send(
                 "Perfil registrado! O bot tentará atualizar seu Dan no próximo ciclo automático.",
                 ephemeral=True
             )
     except Exception as e:
-        print(f"[Erro no Comand Registrar] {e}")
+        print(f"[Erro no Comando Registrar] {e}")
         await interaction.followup.send("Ocorreu um erro ao processar o seu registro. Tente novamente em instantes.", ephemeral=True)
+
 # ==============================================================================
 # INICIALIZAÇÃO
 # ==============================================================================
 async def main():
     if TOKEN:
         await iniciar_servidor_web()
+        await asyncio.sleep(3) # Pausa de segurança
         async with bot:
             await bot.start(TOKEN)
     else:
