@@ -239,7 +239,7 @@ async def atualizar_cargo_membro(guild: discord.Guild, membro: discord.Member, d
 # ==============================================================================
 # TAREFA AGENDADA
 # ==============================================================================
-@tasks.loop(minutes=10)
+@tasks.loop(seconds=20)
 async def sincronizar_cargos_loop():
     usuarios = obter_todos_usuarios()
     if not usuarios:
