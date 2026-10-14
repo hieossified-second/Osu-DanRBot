@@ -134,18 +134,8 @@ async def extrair_dan(url_perfil: str) -> str | None:
     try:
         url_limpa = url_perfil.strip()
         
-        # Se o link contiver o teu nome com colchetes, codificamos para URL (ex: [ vira %5B)
-        # Em vez de cortar no '[', tratamos o link completo codificando caracteres especiais
-        if "mania-tracker.com/player/" in url_limpa:
-            # Mantém a base e codifica corretamente o nome de utilizador com urllib.parse.quote
-            partes = url_limpa.split("/player/")
-            if len(partes) > 1:
-                sub_rota = partes[1]
-                # Codifica colchetes e caracteres especiais para o formato URL seguro
-                sub_rota_segura = urllib.parse.quote(sub_rota, safe="/")
-                url_perfil = f"{partes[0]}/player/{sub_rota_segura}"
-
-        parsed = urlparse(url_perfil)
+        # Se o utilizador enviou o link com ID ou nome, normaliza para garantir que vai para /skills
+        parsed = urlparse(url_limpa)
         caminho_base = parsed.path.rstrip('/')
         for sub in ['/skills', '/reform', '/scores', '/top']:
             if caminho_base.endswith(sub):
@@ -164,7 +154,7 @@ async def extrair_dan(url_perfil: str) -> str | None:
             )
             page = await context.new_page()
 
-            print(f"[Playwright] Acessando URL tratada: {url_skills}", flush=True)
+            print(f"[Playwright] Acessando URL: {url_skills}", flush=True)
             try:
                 await page.goto(url_skills, wait_until="networkidle", timeout=25000)
                 await page.wait_for_selector("button", timeout=15000)
@@ -203,6 +193,53 @@ async def extrair_dan(url_perfil: str) -> str | None:
     except Exception as e:
         print(f"[Erro Scraping] Falha ao processar {url_perfil}: {e}", flush=True)
     return None
+
+@bot.tree.command(name="registrar", description="Registra seu perfil do mania!tracker para sincronizar seu Dan.")
+@app_commands.describe(url="Link do seu perfil no mania-tracker.com (ex: https://mania-tracker.com/player/36083242)")
+async def registrar(interaction: discord.Interaction, url: str):
+    await interaction.response.defer(ephemeral=True)
+    
+    try:
+        if not interaction.guild:
+            await interaction.followup.send("Este comando deve ser usado dentro de um servidor do Discord.", ephemeral=True)
+            return
+
+        # Limpeza simples mantendo a URL intacta
+        url_limpa = url.strip().strip("<>")
+
+        if "mania-tracker.com" not in url_limpa.lower():
+            await interaction.followup.send("URL inválida! Por favor, envie o link do mania-tracker.com.", ephemeral=True)
+            return
+
+        salvar_usuario(interaction.user.id, url_limpa)
+        
+        dan_detectado = await extrair_dan(url_limpa)
+
+        if dan_detectado and dan_detectado in MAPA_DANS:
+            membro = interaction.guild.get_member(interaction.user.id)
+            if not membro:
+                try:
+                    membro = await interaction.guild.fetch_member(interaction.user.id)
+                except Exception:
+                    membro = None
+
+            if membro:
+                await atualizar_cargo_membro(interaction.guild, membro, dan_detectado)
+                nome_cargo = MAPA_DANS[dan_detectado]
+                await interaction.followup.send(
+                    f"Perfil vinculado com sucesso! Seu cargo foi atualizado para **{nome_cargo}** neste servidor.",
+                    ephemeral=True
+                )
+            else:
+                await interaction.followup.send("Perfil registrado, mas não foi possível localizar seu usuário no servidor.", ephemeral=True)
+        else:
+            await interaction.followup.send(
+                "Perfil registrado! O bot tentará atualizar seu Dan no próximo ciclo automático.",
+                ephemeral=True
+            )
+    except Exception as e:
+        print(f"[Erro no Comando Registrar] {e}", flush=True)
+        await interaction.followup.send("Ocorreu um erro ao processar o seu registro. Tente novamente em instantes.", ephemeral=True)
 # ==============================================================================
 # CONFIGURAÇÃO DO BOT DISCORD
 # ==============================================================================
