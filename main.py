@@ -2,7 +2,6 @@ import sqlite3
 import asyncio
 import os
 import re
-import json
 import urllib.parse
 from urllib.parse import urlparse
 import aiohttp
@@ -14,7 +13,7 @@ from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
 # ==============================================================================
-# SERVIDOR HTTP SECUNDÁRIO PARA O RENDER (Garante Plano Gratuito / Web Service)
+# SERVIDOR HTTP SECUNDÁRIO PARA O RENDER (Garante Web Service Gratuito Active)
 # ==============================================================================
 async def handle_ping(request):
     return web.Response(text="Bot do Discord ativo e operante!")
@@ -131,7 +130,7 @@ def processar_dan_com_low(dan_texto_raw: str) -> str | None:
     print(f"[Regra Normal] Detectado '{dan_texto_raw}'. Dan final -> '{dan_base}'")
     return dan_base
 
-async def extrair_dan(session: aiohttp.ClientSession, url_perfil: str) -> str | None:
+async def extrair_dan(url_perfil: str) -> str | None:
     try:
         url_limpa = url_perfil.strip()
         url_decodificada = urllib.parse.unquote(url_limpa)
@@ -149,7 +148,10 @@ async def extrair_dan(session: aiohttp.ClientSession, url_perfil: str) -> str | 
         ]
 
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=True)
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox"]
+            )
             context = await browser.new_context(
                 user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
             )
@@ -238,7 +240,7 @@ async def atualizar_cargo_membro(guild: discord.Guild, membro: discord.Member, d
         print(f"[Erro de Atribuicao] {e}")
 
 # ==============================================================================
-# TAREFA AGENDADA (Ajustado para 5 minutos para evitar Rate Limit e travamentos)
+# TAREFA AGENDADA (Ciclo a cada 5 minutos)
 # ==============================================================================
 @tasks.loop(minutes=5)
 async def sincronizar_cargos_loop():
@@ -246,23 +248,22 @@ async def sincronizar_cargos_loop():
     if not usuarios:
         return
 
-    async with aiohttp.ClientSession() as session:
-        for discord_id, url_perfil in usuarios:
-            dan_detectado = await extrair_dan(session, url_perfil)
-            if not dan_detectado:
+    for discord_id, url_perfil in usuarios:
+        dan_detectado = await extrair_dan(url_perfil)
+        if not dan_detectado:
+            continue
+
+        for guild in bot.guilds:
+            try:
+                membro = guild.get_member(discord_id) or await guild.fetch_member(discord_id)
+                if membro:
+                    await atualizar_cargo_membro(guild, membro, dan_detectado)
+            except discord.NotFound:
                 continue
+            except Exception as e:
+                print(f"[Aviso Loop] Erro ao buscar membro {discord_id} em {guild.name}: {e}")
 
-            for guild in bot.guilds:
-                try:
-                    membro = guild.get_member(discord_id) or await guild.fetch_member(discord_id)
-                    if membro:
-                        await atualizar_cargo_membro(guild, membro, dan_detectado)
-                except discord.NotFound:
-                    continue
-                except Exception as e:
-                    print(f"[Aviso Loop] Erro ao buscar membro {discord_id} em {guild.name}: {e}")
-
-            await asyncio.sleep(2)
+        await asyncio.sleep(2)
 
 @sincronizar_cargos_loop.before_loop
 async def antes_do_loop():
@@ -288,7 +289,6 @@ async def on_ready():
 @bot.tree.command(name="registrar", description="Registra seu perfil do mania!tracker para sincronizar seu Dan.")
 @app_commands.describe(url="Link do seu perfil no mania-tracker.com")
 async def registrar(interaction: discord.Interaction, url: str):
-    # Responde imediatamente ao Discord para não dar timeout
     await interaction.response.defer(ephemeral=True)
     
     try:
@@ -309,11 +309,9 @@ async def registrar(interaction: discord.Interaction, url: str):
 
         salvar_usuario(interaction.user.id, url_limpa)
         
-        async with aiohttp.ClientSession() as session:
-            dan_detectado = await extrair_dan(session, url_limpa)
+        dan_detectado = await extrair_dan(url_limpa)
 
         if dan_detectado and dan_detectado in MAPA_DANS:
-            # Busca o membro com fallback direto na API
             membro = interaction.guild.get_member(interaction.user.id)
             if not membro:
                 try:
@@ -345,7 +343,7 @@ async def registrar(interaction: discord.Interaction, url: str):
 async def main():
     if TOKEN:
         await iniciar_servidor_web()
-        await asyncio.sleep(3) # Pausa de segurança
+        await asyncio.sleep(3)
         async with bot:
             await bot.start(TOKEN)
     else:
