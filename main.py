@@ -23,7 +23,8 @@ async def iniciar_servidor_web():
     app.router.add_get('/', handle_ping)
     runner = web.AppRunner(app)
     await runner.setup()
-    port = int(os.getenv("PORT", 8080))
+    # Utiliza a porta do Render (fallback para 10000)
+    port = int(os.getenv("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     print(f"[Web Server] Escutando na porta {port} para o Render...", flush=True)
@@ -322,7 +323,7 @@ async def registrar(interaction: discord.Interaction, url: str):
         await interaction.followup.send("Ocorreu um erro ao processar o seu registro. Tente novamente em instantes.", ephemeral=True)
 
 # ==============================================================================
-# INICIALIZAÇÃO SEGURA PARA O RENDER
+# INICIALIZAÇÃO BLINDADA PARA O RENDER
 # ==============================================================================
 async def main():
     if not TOKEN:
