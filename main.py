@@ -6,6 +6,7 @@ import json
 import urllib.parse
 from urllib.parse import urlparse
 import aiohttp
+from aiohttp import web
 import discord
 from discord import app_commands
 from discord.ext import commands, tasks
@@ -13,9 +14,24 @@ from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
 # ==============================================================================
+# SERVIDOR HTTP SECUNDÁRIO PARA O RENDER (Garante Plano Gratuito / Web Service)
+# ==============================================================================
+async def handle_ping(request):
+    return web.Response(text="Bot do Discord ativo e operante!")
+
+async def iniciar_servidor_web():
+    app = web.Application()
+    app.router.add_get('/', handle_ping)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", 8080))
+    site = web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"[Web Server] Escutando na porta {port} para o Render...")
+
+# ==============================================================================
 # CONFIGURAÇÃO DO TOKEN E HIERARQUIA DOS DANS
 # ==============================================================================
-# Lê o token com segurança a partir da variável de ambiente
 TOKEN = os.getenv("DISCORD_TOKEN")
 
 ORDEM_DANS = [
@@ -116,7 +132,6 @@ def processar_dan_com_low(dan_texto_raw: str) -> str | None:
     return dan_base
 
 async def extrair_dan(session: aiohttp.ClientSession, url_perfil: str) -> str | None:
-    """Carrega a página via Playwright preservando os colchetes e extrai o Dan."""
     try:
         url_limpa = url_perfil.strip()
         url_decodificada = urllib.parse.unquote(url_limpa)
@@ -150,7 +165,6 @@ async def extrair_dan(session: aiohttp.ClientSession, url_perfil: str) -> str | 
                 content = await page.content()
                 soup = BeautifulSoup(content, "html.parser")
 
-                # 1. Busca por imagens de Dan
                 for img in soup.find_all("img"):
                     src = img.get("src", "")
                     alt = img.get("alt", "").strip()
@@ -169,7 +183,6 @@ async def extrair_dan(session: aiohttp.ClientSession, url_perfil: str) -> str | 
                             await browser.close()
                             return processar_dan_com_low(dan_raw)
 
-                # 2. Busca pelo atributo title dos botões
                 for button in soup.find_all("button"):
                     title = button.get("title", "")
                     if "Regular dan estimate:" in title:
@@ -198,7 +211,6 @@ intents.message_content = True
 bot = commands.Bot(command_prefix="!", intents=intents)
 
 async def atualizar_cargo_membro(guild: discord.Guild, membro: discord.Member, dan_chave: str):
-    """Atualiza os cargos de um membro numa guild (servidor) específica."""
     if dan_chave not in MAPA_DANS:
         return
     
@@ -225,9 +237,9 @@ async def atualizar_cargo_membro(guild: discord.Guild, membro: discord.Member, d
         print(f"[Erro de Atribuição] {e}")
 
 # ==============================================================================
-# TAREFA AGENDADA (VARRE TODOS OS SERVIDORES QUE O BOT PARTICIPA)
+# TAREFA AGENDADA
 # ==============================================================================
-@tasks.loop(minutes=10) # Ajuste o intervalo para produção (ex: 10 minutos)
+@tasks.loop(minutes=10)
 async def sincronizar_cargos_loop():
     usuarios = obter_todos_usuarios()
     if not usuarios:
@@ -239,7 +251,6 @@ async def sincronizar_cargos_loop():
             if not dan_detectado:
                 continue
 
-            # Passa por todos os servidores onde o bot está presente
             for guild in bot.guilds:
                 try:
                     membro = guild.get_member(discord_id) or await guild.fetch_member(discord_id)
@@ -264,7 +275,6 @@ async def on_ready():
     iniciar_banco()
     print(f"Bot online em {len(bot.guilds)} servidores como {bot.user}")
     
-    # Sincroniza os comandos Slash de forma GLOBAL para funcionar em todos os servidores
     try:
         synced = await bot.tree.sync()
         print(f"Sincronizados {len(synced)} comandos Slash globalmente!")
@@ -314,9 +324,16 @@ async def registrar(interaction: discord.Interaction, url: str):
             ephemeral=True
         )
 
-# EXECUTAR O BOT
-if __name__ == "__main__":
+# ==============================================================================
+# INICIALIZAÇÃO
+# ==============================================================================
+async def main():
     if TOKEN:
-        bot.run(TOKEN)
+        await iniciar_servidor_web()
+        async with bot:
+            await bot.start(TOKEN)
     else:
         print("ERRO: A variável de ambiente DISCORD_TOKEN não foi configurada!")
+
+if __name__ == "__main__":
+    asyncio.run(main())
