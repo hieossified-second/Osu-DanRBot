@@ -133,8 +133,6 @@ def processar_dan_com_low(dan_texto_raw: str) -> str | None:
 async def extrair_dan(url_perfil: str) -> str | None:
     try:
         url_limpa = url_perfil.strip()
-        
-        # Limpa sufixos e colchetes indesejados da URL (ex: [AAAAAAAI])
         if "[" in url_limpa:
             url_limpa = url_limpa.split("[")[0]
 
@@ -172,33 +170,29 @@ async def extrair_dan(url_perfil: str) -> str | None:
                 content = await page.content()
                 soup = BeautifulSoup(content, "html.parser")
 
-                for img in soup.find_all("img"):
-                    src = img.get("src", "")
-                    alt = img.get("alt", "").strip()
-                    
-                    if "/images/dans/" in src:
-                        if alt:
-                            print(f"[Sucesso Alt Img] Dan encontrado: '{alt}'", flush=True)
-                            await browser.close()
-                            return processar_dan_com_low(alt)
-                        
-                        caminho_src = urlparse(src).path
-                        nome_arquivo = os.path.basename(caminho_src)
-                        dan_raw = os.path.splitext(nome_arquivo)[0]
-                        if dan_raw:
-                            print(f"[Sucesso Src Img] Dan encontrado: '{dan_raw}'", flush=True)
-                            await browser.close()
-                            return processar_dan_com_low(dan_raw)
-
+                # Varre os botões de estimativa baseados no HTML real do mania-tracker
                 for button in soup.find_all("button"):
                     title = button.get("title", "")
-                    if "Regular dan estimate:" in title:
-                        match = re.search(r'~([a-zA-Z0-9_\-\+\s]+?),', title)
+                    if "Regular dan estimate:" in title or "LN dan estimate:" in title:
+                        # Tenta extrair diretamente do atributo alt da imagem dentro do botão
+                        img_tag = button.find("img")
+                        if img_tag and img_tag.get("alt"):
+                            alt_val = img_tag.get("alt").strip()
+                            print(f"[Sucesso Alt Estimativa] Encontrado: '{alt_val}'", flush=True)
+                            res = processar_dan_com_low(alt_val)
+                            if res:
+                                await browser.close()
+                                return res
+
+                        # Fallback por regex no texto do title
+                        match = re.search(r'~\s*([a-zA-Z0-9_\-\+\s]+?)(?:,|\s+with)', title)
                         if match:
                             dan_bruto = match.group(1).strip()
-                            print(f"[Sucesso Title Button] Dan encontrado: '{dan_bruto}'", flush=True)
-                            await browser.close()
-                            return processar_dan_com_low(dan_bruto)
+                            print(f"[Sucesso Title Estimativa] Encontrado: '{dan_bruto}'", flush=True)
+                            res = processar_dan_com_low(dan_bruto)
+                            if res:
+                                await browser.close()
+                                return res
 
             await browser.close()
 
@@ -302,8 +296,6 @@ async def registrar(interaction: discord.Interaction, url: str):
             return
 
         url_limpa = urllib.parse.unquote(url.strip())
-        
-        # Remove caracteres indesejados e sufixos anexados (ex: [AAAAAAAI])
         if "[" in url_limpa:
             url_limpa = url_limpa.split("[")[0]
 
