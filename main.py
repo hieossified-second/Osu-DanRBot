@@ -13,7 +13,7 @@ from bs4 import BeautifulSoup
 from playwright.async_api import async_playwright
 
 # ==============================================================================
-# SERVIDOR HTTP SECUNDÁRIO PARA O RENDER (Garante Web Service Gratuito Active)
+# SERVIDOR HTTP SECUNDÁRIO PARA O RENDER (Garante Web Service Gratuito Ativo)
 # ==============================================================================
 async def handle_ping(request):
     return web.Response(text="Bot do Discord ativo e operante!")
@@ -26,7 +26,7 @@ async def iniciar_servidor_web():
     port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    print(f"[Web Server] Escutando na porta {port} para o Render...")
+    print(f"[Web Server] Escutando na porta {port} para o Render...", flush=True)
 
 # ==============================================================================
 # CONFIGURAÇÃO DO TOKEN E HIERARQUIA DOS DANS
@@ -121,18 +121,23 @@ def processar_dan_com_low(dan_texto_raw: str) -> str | None:
         idx = ORDEM_DANS.index(dan_base)
         if idx > 0:
             dan_final = ORDEM_DANS[idx - 1]
-            print(f"[Regra Low] Detectado '{dan_texto_raw}' (LOW). Rebaixado de '{dan_base}' para -> '{dan_final}'")
+            print(f"[Regra Low] Detectado '{dan_texto_raw}' (LOW). Rebaixado de '{dan_base}' para -> '{dan_final}'", flush=True)
             return dan_final
         else:
-            print(f"[Regra Low] Jogador é '{dan_base}' Low, mas já está no menor Dan disponível.")
+            print(f"[Regra Low] Jogador é '{dan_base}' Low, mas já está no menor Dan disponível.", flush=True)
             return dan_base
 
-    print(f"[Regra Normal] Detectado '{dan_texto_raw}'. Dan final -> '{dan_base}'")
+    print(f"[Regra Normal] Detectado '{dan_texto_raw}'. Dan final -> '{dan_base}'", flush=True)
     return dan_base
 
 async def extrair_dan(url_perfil: str) -> str | None:
     try:
         url_limpa = url_perfil.strip()
+        
+        # Limpa sufixos e colchetes indesejados da URL (ex: [AAAAAAAI])
+        if "[" in url_limpa:
+            url_limpa = url_limpa.split("[")[0]
+
         url_decodificada = urllib.parse.unquote(url_limpa)
         parsed = urlparse(url_decodificada)
         
@@ -158,7 +163,7 @@ async def extrair_dan(url_perfil: str) -> str | None:
             page = await context.new_page()
 
             for url_final in urls_para_testar:
-                print(f"[Playwright] Acessando URL: {url_final}")
+                print(f"[Playwright] Acessando URL: {url_final}", flush=True)
                 try:
                     await page.goto(url_final, wait_until="networkidle", timeout=20000)
                 except Exception:
@@ -173,7 +178,7 @@ async def extrair_dan(url_perfil: str) -> str | None:
                     
                     if "/images/dans/" in src:
                         if alt:
-                            print(f"[Sucesso Alt Img] Dan encontrado: '{alt}'")
+                            print(f"[Sucesso Alt Img] Dan encontrado: '{alt}'", flush=True)
                             await browser.close()
                             return processar_dan_com_low(alt)
                         
@@ -181,7 +186,7 @@ async def extrair_dan(url_perfil: str) -> str | None:
                         nome_arquivo = os.path.basename(caminho_src)
                         dan_raw = os.path.splitext(nome_arquivo)[0]
                         if dan_raw:
-                            print(f"[Sucesso Src Img] Dan encontrado: '{dan_raw}'")
+                            print(f"[Sucesso Src Img] Dan encontrado: '{dan_raw}'", flush=True)
                             await browser.close()
                             return processar_dan_com_low(dan_raw)
 
@@ -191,16 +196,16 @@ async def extrair_dan(url_perfil: str) -> str | None:
                         match = re.search(r'~([a-zA-Z0-9_\-\+\s]+?),', title)
                         if match:
                             dan_bruto = match.group(1).strip()
-                            print(f"[Sucesso Title Button] Dan encontrado: '{dan_bruto}'")
+                            print(f"[Sucesso Title Button] Dan encontrado: '{dan_bruto}'", flush=True)
                             await browser.close()
                             return processar_dan_com_low(dan_bruto)
 
             await browser.close()
 
-        print(f"[Aviso] Nenhum registo de Dan foi localizado no perfil.")
+        print(f"[Aviso] Nenhum registo de Dan foi localizado no perfil.", flush=True)
 
     except Exception as e:
-        print(f"[Erro Scraping] Falha ao processar {url_perfil}: {e}")
+        print(f"[Erro Scraping] Falha ao processar {url_perfil}: {e}", flush=True)
     return None
 
 # ==============================================================================
@@ -220,7 +225,7 @@ async def atualizar_cargo_membro(guild: discord.Guild, membro: discord.Member, d
     cargo_alvo = discord.utils.get(guild.roles, name=nome_cargo_alvo)
     
     if not cargo_alvo:
-        print(f"[Aviso] O cargo '{nome_cargo_alvo}' não foi encontrado no servidor '{guild.name}'.")
+        print(f"[Aviso] O cargo '{nome_cargo_alvo}' não foi encontrado no servidor '{guild.name}'.", flush=True)
         return
 
     todos_cargos_dan = set(MAPA_DANS.values())
@@ -233,11 +238,11 @@ async def atualizar_cargo_membro(guild: discord.Guild, membro: discord.Member, d
             if cargos_dan_existentes:
                 await membro.remove_roles(*cargos_dan_existentes)
             await membro.add_roles(cargo_alvo)
-            print(f"[Sucesso] Cargo '{nome_cargo_alvo}' concedido a {membro.display_name} no servidor '{guild.name}'!")
+            print(f"[Sucesso] Cargo '{nome_cargo_alvo}' concedido a {membro.display_name} no servidor '{guild.name}'!", flush=True)
     except discord.Forbidden:
-        print(f"[Erro Permissao] O cargo do bot precisa de estar no TOPO da lista de cargos no servidor '{guild.name}'.")
+        print(f"[Erro Permissao] O cargo do bot precisa de estar no TOPO da lista de cargos no servidor '{guild.name}'.", flush=True)
     except Exception as e:
-        print(f"[Erro de Atribuicao] {e}")
+        print(f"[Erro de Atribuicao] {e}", flush=True)
 
 # ==============================================================================
 # TAREFA AGENDADA (Ciclo a cada 5 minutos)
@@ -261,7 +266,7 @@ async def sincronizar_cargos_loop():
             except discord.NotFound:
                 continue
             except Exception as e:
-                print(f"[Aviso Loop] Erro ao buscar membro {discord_id} em {guild.name}: {e}")
+                print(f"[Aviso Loop] Erro ao buscar membro {discord_id} em {guild.name}: {e}", flush=True)
 
         await asyncio.sleep(2)
 
@@ -275,13 +280,13 @@ async def antes_do_loop():
 @bot.event
 async def on_ready():
     iniciar_banco()
-    print(f"Bot online em {len(bot.guilds)} servidores como {bot.user}")
+    print(f"Bot online em {len(bot.guilds)} servidores como {bot.user}", flush=True)
     
     try:
         synced = await bot.tree.sync()
-        print(f"Sincronizados {len(synced)} comandos Slash globalmente!")
+        print(f"Sincronizados {len(synced)} comandos Slash globalmente!", flush=True)
     except Exception as e:
-        print(f"Erro ao sincronizar comandos globalmente: {e}")
+        print(f"Erro ao sincronizar comandos globalmente: {e}", flush=True)
     
     if not sincronizar_cargos_loop.is_running():
         sincronizar_cargos_loop.start()
@@ -297,6 +302,11 @@ async def registrar(interaction: discord.Interaction, url: str):
             return
 
         url_limpa = urllib.parse.unquote(url.strip())
+        
+        # Remove caracteres indesejados e sufixos anexados (ex: [AAAAAAAI])
+        if "[" in url_limpa:
+            url_limpa = url_limpa.split("[")[0]
+
         match = re.search(r'https?://[^\s\)]+', url_limpa)
         if match:
             url_limpa = match.group(0)
@@ -334,7 +344,7 @@ async def registrar(interaction: discord.Interaction, url: str):
                 ephemeral=True
             )
     except Exception as e:
-        print(f"[Erro no Comando Registrar] {e}")
+        print(f"[Erro no Comando Registrar] {e}", flush=True)
         await interaction.followup.send("Ocorreu um erro ao processar o seu registro. Tente novamente em instantes.", ephemeral=True)
 
 # ==============================================================================
@@ -347,7 +357,7 @@ async def main():
         async with bot:
             await bot.start(TOKEN)
     else:
-        print("ERRO: A variável de ambiente DISCORD_TOKEN não foi configurada!")
+        print("ERRO: A variável de ambiente DISCORD_TOKEN não foi configurada!", flush=True)
 
 if __name__ == "__main__":
     asyncio.run(main())
