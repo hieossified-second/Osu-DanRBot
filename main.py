@@ -287,26 +287,28 @@ async def on_ready():
 @bot.tree.command(name="registrar", description="Registra seu perfil do mania!tracker para sincronizar seu Dan.")
 @app_commands.describe(url="Link do seu perfil no mania-tracker.com")
 async def registrar(interaction: discord.Interaction, url: str):
+    # 1. AVISA O DISCORD IMEDIATAMENTE QUE O BOT ESTÁ A PROCESSAR (Evita o erro "Não respondeu")
     await interaction.response.defer(ephemeral=True)
     
-    url_limpa = urllib.parse.unquote(url.strip())
-    match = re.search(r'https?://[^\s\)]+', url_limpa)
-    if match:
-        url_limpa = match.group(0)
-    
-    url_limpa = url_limpa.rstrip(">)]").lstrip("<([")
+    try:
+        url_limpa = urllib.parse.unquote(url.strip())
+        match = re.search(r'https?://[^\s\)]+', url_limpa)
+        if match:
+            url_limpa = match.group(0)
+        
+        url_limpa = url_limpa.rstrip(">)]").lstrip("<([")
 
-    if "mania-tracker.com" not in url_limpa.lower():
-        await interaction.followup.send("URL inválida! Por favor, envie o link do mania-tracker.com.", ephemeral=True)
-        return
+        if "mania-tracker.com" not in url_limpa.lower():
+            await interaction.followup.send("URL inválida! Por favor, envie o link do mania-tracker.com.", ephemeral=True)
+            return
 
-    salvar_usuario(interaction.user.id, url_limpa)
-    
-    async with aiohttp.ClientSession() as session:
-        dan_detectado = await extrair_dan(session, url_limpa)
+        salvar_usuario(interaction.user.id, url_limpa)
+        
+        # 2. FAZ O SCRAPING COM O PLAYWRIGHT (Pode demorar vários segundos agora sem dar erro)
+        async with aiohttp.ClientSession() as session:
+            dan_detectado = await extrair_dan(session, url_limpa)
 
-    if dan_detectado and dan_detectado in MAPA_DANS:
-        try:
+        if dan_detectado and dan_detectado in MAPA_DANS:
             membro = interaction.guild.get_member(interaction.user.id) or await interaction.guild.fetch_member(interaction.user.id)
             await atualizar_cargo_membro(interaction.guild, membro, dan_detectado)
             
@@ -315,15 +317,14 @@ async def registrar(interaction: discord.Interaction, url: str):
                 f"Perfil vinculado com sucesso! Seu cargo foi atualizado para **{nome_cargo}** neste servidor.",
                 ephemeral=True
             )
-        except Exception as e:
-            print(f"[Erro de Membro] {e}")
-            await interaction.followup.send("Erro ao localizar seu usuário no servidor.", ephemeral=True)
-    else:
-        await interaction.followup.send(
-            "Perfil registrado! O bot tentará atualizar seu Dan no próximo ciclo automático.",
-            ephemeral=True
-        )
-
+        else:
+            await interaction.followup.send(
+                "Perfil registrado! O bot tentará atualizar seu Dan no próximo ciclo automático.",
+                ephemeral=True
+            )
+    except Exception as e:
+        print(f"[Erro no Comand Registrar] {e}")
+        await interaction.followup.send("Ocorreu um erro ao processar o seu registro. Tente novamente em instantes.", ephemeral=True)
 # ==============================================================================
 # INICIALIZAÇÃO
 # ==============================================================================
