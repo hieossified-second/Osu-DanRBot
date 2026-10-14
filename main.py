@@ -23,8 +23,7 @@ async def iniciar_servidor_web():
     app.router.add_get('/', handle_ping)
     runner = web.AppRunner(app)
     await runner.setup()
-    # Utiliza a porta do Render (fallback para 10000)
-    port = int(os.getenv("PORT", 10000))
+    port = int(os.getenv("PORT", 8080))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     print(f"[Web Server] Escutando na porta {port} para o Render...", flush=True)
@@ -134,7 +133,12 @@ def processar_dan_com_low(dan_texto_raw: str) -> str | None:
 async def extrair_dan(url_perfil: str) -> str | None:
     try:
         url_limpa = url_perfil.strip()
-        parsed = urlparse(url_limpa)
+        if "[" in url_limpa:
+            url_limpa = url_limpa.split("[")[0]
+
+        url_decodificada = urllib.parse.unquote(url_limpa)
+        parsed = urlparse(url_decodificada)
+        
         caminho_base = parsed.path.rstrip('/')
         for sub in ['/skills', '/reform', '/scores', '/top']:
             if caminho_base.endswith(sub):
@@ -156,38 +160,41 @@ async def extrair_dan(url_perfil: str) -> str | None:
             print(f"[Playwright] Acessando URL: {url_skills}", flush=True)
             try:
                 await page.goto(url_skills, wait_until="networkidle", timeout=25000)
+                
+                # Aguarda o elemento de estimativa Regular carregar na página renderizada
                 await page.wait_for_selector("button", timeout=15000)
-                await asyncio.sleep(2)
+                await asyncio.sleep(2) # Pausa de segurança para o React injetar as imagens/títulos
             except Exception as e:
-                print(f"[Playwright Alerta] Demora no carregamento: {e}", flush=True)
+                print(f"[Playwright Alerta] Timeout ao aguardar seletores dinâmicos: {e}", flush=True)
             
             content = await page.content()
             soup = BeautifulSoup(content, "html.parser")
 
-            # 1. Procura nos botões de estimativa (Regular / LN)
+            # 1. Procura em todas as imagens da página por referências de Dan
+            for img in soup.find_all("img"):
+                src = img.get("src", "")
+                alt = img.get("alt", "").strip().lower()
+                
+                if "dans/" in src or alt:
+                    for d in ORDEM_DANS:
+                        if d in alt or d in src.lower():
+                            print(f"[Sucesso Img/Alt] Dan detectado: alt='{alt}', src='{src}'", flush=True)
+                            await browser.close()
+                            return processar_dan_com_low(alt if alt else d)
+
+            # 2. Procura nos botões de estimativa (Regular / LN)
             for button in soup.find_all("button"):
                 title = button.get("title", "").lower()
                 if "dan estimate:" in title or "regular" in title or "ln" in title:
                     for d in ORDEM_DANS:
                         if d in title:
-                            print(f"[Sucesso Title Button] Dan detectado: '{title}'", flush=True)
+                            print(f"[Sucesso Title Button] Dan detectado no title: '{title}'", flush=True)
                             await browser.close()
                             return processar_dan_com_low(title)
 
-            # 2. Procura por imagens de Dan na página
-            for img in soup.find_all("img"):
-                src = img.get("src", "")
-                alt = img.get("alt", "").strip().lower()
-                if "dans/" in src or alt:
-                    for d in ORDEM_DANS:
-                        if d in alt or d in src.lower():
-                            print(f"[Sucesso Img/Alt] Dan detectado: alt='{alt}'", flush=True)
-                            await browser.close()
-                            return processar_dan_com_low(alt if alt else d)
-
             await browser.close()
 
-        print(f"[Aviso] Nenhum registo de Dan foi localizado no perfil.", flush=True)
+        print(f"[Aviso] Nenhum registo de Dan foi localizado no perfil após renderização dinâmica.", flush=True)
 
     except Exception as e:
         print(f"[Erro Scraping] Falha ao processar {url_perfil}: {e}", flush=True)
@@ -277,7 +284,7 @@ async def on_ready():
         sincronizar_cargos_loop.start()
 
 @bot.tree.command(name="registrar", description="Registra seu perfil do mania!tracker para sincronizar seu Dan.")
-@app_commands.describe(url="Link do seu perfil no mania-tracker.com (ex: https://mania-tracker.com/player/36083242)")
+@app_commands.describe(url="Link do seu perfil no mania-tracker.com")
 async def registrar(interaction: discord.Interaction, url: str):
     await interaction.response.defer(ephemeral=True)
     
@@ -286,7 +293,15 @@ async def registrar(interaction: discord.Interaction, url: str):
             await interaction.followup.send("Este comando deve ser usado dentro de um servidor do Discord.", ephemeral=True)
             return
 
-        url_limpa = url.strip().strip("<>")
+        url_limpa = urllib.parse.unquote(url.strip())
+        if "[" in url_limpa:
+            url_limpa = url_limpa.split("[")[0]
+
+        match = re.search(r'https?://[^\s\)]+', url_limpa)
+        if match:
+            url_limpa = match.group(0)
+        
+        url_limpa = url_limpa.rstrip(">)]").lstrip("<([")
 
         if "mania-tracker.com" not in url_limpa.lower():
             await interaction.followup.send("URL inválida! Por favor, envie o link do mania-tracker.com.", ephemeral=True)
@@ -323,23 +338,16 @@ async def registrar(interaction: discord.Interaction, url: str):
         await interaction.followup.send("Ocorreu um erro ao processar o seu registro. Tente novamente em instantes.", ephemeral=True)
 
 # ==============================================================================
-# INICIALIZAÇÃO BLINDADA PARA O RENDER
+# INICIALIZAÇÃO CORRETA PARA O RENDER
 # ==============================================================================
 async def main():
-    if not TOKEN:
-        print("ERRO: A variável de ambiente DISCORD_TOKEN não foi configurada!", flush=True)
-        return
-
-    try:
+    if TOKEN:
         await iniciar_servidor_web()
-    except Exception as e:
-        print(f"[Aviso Servidor Web] Erro ao iniciar porta: {e}", flush=True)
-
-    async with bot:
-        await bot.start(TOKEN)
+        await asyncio.sleep(2)
+        async with bot:
+            await bot.start(TOKEN)
+    else:
+        print("ERRO: A variável de ambiente DISCORD_TOKEN não foi configurada!", flush=True)
 
 if __name__ == "__main__":
-    try:
-        asyncio.run(main())
-    except KeyboardInterrupt:
-        pass
+    asyncio.run(main())
