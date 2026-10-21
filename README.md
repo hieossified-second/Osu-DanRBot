@@ -1,3 +1,5 @@
+##Meu intuito com esse bot é apenas para aprendizado e acrescentar conhecimento na área da programação envolvendo diversos tipos de ferramentas na área de desenvolvimento de sistemas
+
 # Osu-DanRBot
 ## vibe coding bot for Discord, he takes your mania tracker profile and gets your dan reform skill :)
 
